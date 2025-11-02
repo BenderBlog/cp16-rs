@@ -5,4 +5,4 @@ edition = "2024"
 
 [dependencies]
 hound = "3.5.1"
-fontdue = "0.9.3"
+unifont = "1.1.0"
