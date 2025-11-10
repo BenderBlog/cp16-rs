@@ -25,6 +25,7 @@ pub struct CP16Generator {
     glyph: &'static Glyph,
     samples_per_line: u32,
     current_sample: u32,
+    is_horizontal: bool,
 }
 
 impl CP16Generator {
@@ -33,6 +34,7 @@ impl CP16Generator {
         start_freq: u32,
         step: u32,
         sample_rate: u32,
+        is_horizontal: bool,
     ) -> Result<Self, OutOfMaxFrequencyException> {
         let max_freq = sample_rate >> 1;
         let range = std::iter::successors(Some(start_freq), |&n| Some(n + step))
@@ -65,10 +67,15 @@ impl CP16Generator {
             text_glyph,
             char_pos: 0,
             glyph: first,
-            start_padding: if first.is_fullwidth() { 0 } else { 4 },
+            start_padding: if is_horizontal || first.is_fullwidth() {
+                0
+            } else {
+                4
+            },
             y: 0,
             samples_per_line: sample_rate / 16,
             current_sample: 0,
+            is_horizontal,
         })
     }
 }
@@ -76,13 +83,23 @@ impl CP16Generator {
 impl Iterator for CP16Generator {
     type Item = i16;
     fn next(&mut self) -> Option<i16> {
-        if self.y >= 16 {
+        if self.y
+            >= if self.is_horizontal {
+                self.glyph.get_width() + self.start_padding
+            } else {
+                16
+            }
+        {
             self.char_pos += 1;
             if self.char_pos >= self.text_glyph.len() {
                 return None;
             }
             self.glyph = self.text_glyph[self.char_pos];
-            self.start_padding = if self.glyph.is_fullwidth() { 0 } else { 4 };
+            self.start_padding = if self.is_horizontal || self.glyph.is_fullwidth() {
+                0
+            } else {
+                4
+            };
             self.y = 0;
         }
 
@@ -93,12 +110,19 @@ impl Iterator for CP16Generator {
 
         let mut sum_up: i32 = 0;
 
-        for x in self.start_padding..self.glyph.get_width() {
-            let is_blank = if self.glyph.get_pixel(x, self.y) {
-                1
+        let range_end = if self.is_horizontal {
+            16
+        } else {
+            self.glyph.get_width() + self.start_padding
+        };
+
+        for x in self.start_padding..range_end {
+            let pixel = if self.is_horizontal {
+                self.glyph.get_pixel(self.y - self.start_padding, 16 - x)
             } else {
-                0
+                self.glyph.get_pixel(x - self.start_padding, self.y)
             };
+            let is_blank = if pixel { 1 } else { 0 };
             sum_up = sum_up + (self.freqs[x].next().unwrap() * is_blank) as i32;
         }
 
