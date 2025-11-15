@@ -35,6 +35,7 @@ impl CP16Generator {
         step: u32,
         sample_rate: u32,
         is_horizontal: bool,
+        time_per_font: f64,
     ) -> Result<Self, OutOfMaxFrequencyException> {
         let max_freq = sample_rate >> 1;
         let range = std::iter::successors(Some(start_freq), |&n| Some(n + step))
@@ -54,13 +55,15 @@ impl CP16Generator {
             Some(n) => Some(n),
             None => {
                 println!(
-                    "Unifont does not contains {x}, will be replased with a full length question mark"
+                    "Unifont does not contains {}, will be replased with a full length question mark", x
                 );
                 get_glyph('？')
             }
         }).collect();
 
         let first = text_glyph[0];
+
+        let samples_per_line = (sample_rate as f64 / 16.0 * time_per_font) as u32;
 
         Ok(Self {
             freqs,
@@ -73,7 +76,7 @@ impl CP16Generator {
                 4
             },
             y: 0,
-            samples_per_line: sample_rate / 16,
+            samples_per_line,
             current_sample: 0,
             is_horizontal,
         })
@@ -128,6 +131,6 @@ impl Iterator for CP16Generator {
 
         self.current_sample += 1;
 
-        return Some((sum_up / (self.glyph.get_width() as i32)) as i16);
+        return Some((sum_up / (self.glyph.get_width() as i32 * 2)) as i16);
     }
 }
