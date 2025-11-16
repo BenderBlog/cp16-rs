@@ -15,7 +15,7 @@ fn main() {
     };
     let mut writer = hound::WavWriter::create("cp16-new.wav", spec).unwrap();
 
-    let iter = CP16Generator::new(chars, 1600, 15, sample_rate, false, 3.0).unwrap();
+    let iter = CP16Generator::new(chars, 1600, 15, sample_rate, true, 1.0).unwrap();
 
     for i in iter {
         writer.write_sample(i).unwrap();
