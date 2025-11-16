@@ -88,9 +88,9 @@ impl Iterator for CP16Generator {
     fn next(&mut self) -> Option<i16> {
         if self.y
             >= if self.is_horizontal {
-                self.glyph.get_width() + self.start_padding
+                self.glyph.get_width() + self.start_padding + 2
             } else {
-                16
+                16 + 2
             }
         {
             self.char_pos += 1;
@@ -119,14 +119,22 @@ impl Iterator for CP16Generator {
             self.glyph.get_width() + self.start_padding
         };
 
-        for x in self.start_padding..range_end {
-            let pixel = if self.is_horizontal {
-                self.glyph.get_pixel(self.y - self.start_padding, 16 - x)
+        if self.y
+            < (if self.is_horizontal {
+                self.glyph.get_width() + self.start_padding
             } else {
-                self.glyph.get_pixel(x - self.start_padding, self.y)
-            };
-            let is_blank = if pixel { 1 } else { 0 };
-            sum_up = sum_up + (self.freqs[x].next().unwrap() * is_blank) as i32;
+                16
+            })
+        {
+            for x in self.start_padding..range_end {
+                let pixel = if self.is_horizontal {
+                    self.glyph.get_pixel(self.y - self.start_padding, 16 - x)
+                } else {
+                    self.glyph.get_pixel(x - self.start_padding, self.y)
+                };
+                let is_blank = if pixel { 1 } else { 0 };
+                sum_up = sum_up + (self.freqs[x].next().unwrap() * is_blank) as i32;
+            }
         }
 
         self.current_sample += 1;
