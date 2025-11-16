@@ -3,11 +3,18 @@
 version = 4
 
 [[package]]
-name = "cp16-rs"
+name = "cp16"
 version = "0.1.0"
 dependencies = [
- "hound",
  "unifont",
+]
+
+[[package]]
+name = "cp16-cli"
+version = "0.1.0"
+dependencies = [
+ "cp16",
+ "hound",
 ]
 
 [[package]]

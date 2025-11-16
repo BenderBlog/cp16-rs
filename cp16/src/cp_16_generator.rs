@@ -122,7 +122,7 @@ impl CP16Generator {
     /// - is_vertical_display_on_waterfall：设置字形在瀑布图上是否需要垂直展示
     /// - time_per_font：每个字的显示时间，单位是秒
     pub fn new(
-        text: &'static str,
+        text: String,
         start_freq: u32,
         step: u32,
         sample_rate: u32,
