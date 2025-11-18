@@ -1,8 +1,11 @@
 [package]
-name = "cp16-cli"
+name = "cp16-gui"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 cp16 = { path = "../cp16" }
+egui = "0.33.2"
+eframe = "0.33.2"
 hound = "3.5.1"
+cpal = "0.16.0"

@@ -1,2 +1,3 @@
 [workspace]
-members = ["cp16", "cli"]
+resolver = "1"
+members = ["cp16", "cp16-cli", "cp16-gui"]
