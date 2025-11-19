@@ -29,11 +29,16 @@ struct Args {
     #[arg(long, default_value_t = 1.5)]
     time_per_font: f64,
 
+    /// Path to store the wave file, if not set, play
     #[arg(long)]
     path: Option<PathBuf>,
 
     /// String to be transfered to CP-16
     text: String,
+
+    /// Do not start from the last line of the last character, set to true when disable_vertical set to true
+    #[arg(long, default_value_t = false)]
+    is_not_reverse: bool,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -48,6 +53,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         args.sample_rate,
         !args.disable_vertical,
         args.time_per_font,
+        if args.disable_vertical {
+            false
+        } else {
+            !args.is_not_reverse
+        },
     ) {
         Ok(d) => d,
         Err(_) => {

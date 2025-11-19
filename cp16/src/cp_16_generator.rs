@@ -70,48 +70,41 @@ pub struct CP16Generator {
     /// 设置字形在瀑布图上是否需要垂直展示
     is_vertical_display_on_waterfall: bool,
 
-    /// 临时存储行的信息
-    line_info: Vec<bool>,
-
     /// 该字符需迭代的行数
     line_count: usize,
+
+    /// 是否反向迭代字符及扫描行
+    is_reverse: bool,
 }
 
 impl CP16Generator {
     /// 根据字形，当前行数和是否垂直展示读取对应行/列的信息
-    fn get_line_with_parameter(
-        start_padding: usize,
-        range_end: usize,
-        is_vertical_display_on_waterfall: bool,
-        glyph: &'static Glyph,
-        iter_index: usize,
-    ) -> Vec<bool> {
+    fn get_line(&self) -> Vec<bool> {
         let mut line_info = [
             false, false, false, false, false, false, false, false, false, false, false, false,
             false, false, false, false,
         ];
 
-        for x in start_padding..range_end {
-            line_info[x] = if is_vertical_display_on_waterfall {
-                // 如果是瀑布图模式，则迭代过程中，y 轴不变，迭代 x 轴
-                glyph.get_pixel(x - start_padding, iter_index)
+        for i in self.start_padding..self.range_end {
+            let mut y = if self.is_vertical_display_on_waterfall {
+                self.iter_index
             } else {
-                glyph.get_pixel(iter_index - start_padding, 16 - x)
+                16 - i
+            };
+            if self.is_reverse {
+                y = 16 - y;
+            }
+
+            line_info[i] = if self.is_vertical_display_on_waterfall {
+                // 如果是瀑布图模式，则迭代过程中，y 轴不变，迭代 x 轴
+                self.glyph.get_pixel(i - self.start_padding, y)
+            } else {
+                self.glyph
+                    .get_pixel(self.iter_index - self.start_padding, y)
             };
         }
 
         line_info.to_vec()
-    }
-
-    /// 根据字形，当前行数和是否垂直展示读取对应行/列的信息
-    fn get_line(&self) -> Vec<bool> {
-        Self::get_line_with_parameter(
-            self.start_padding,
-            self.range_end,
-            self.is_vertical_display_on_waterfall,
-            self.glyph,
-            self.iter_index,
-        )
     }
 
     /// 新建一个生成器
@@ -121,6 +114,7 @@ impl CP16Generator {
     /// - sample_rate：采样率
     /// - is_vertical_display_on_waterfall：设置字形在瀑布图上是否需要垂直展示
     /// - time_per_font：每个字的显示时间，单位是秒
+    /// - is_reverse：是否从最后一个字符的最后一行数据开始迭代
     pub fn new(
         text: String,
         start_freq: u32,
@@ -128,6 +122,7 @@ impl CP16Generator {
         sample_rate: u32,
         is_vertical_display_on_waterfall: bool,
         time_per_font: f64,
+        is_reverse: bool,
     ) -> Result<Self, OutOfMaxFrequencyException> {
         // 第一步：根据起始频率和频率间隔，计算出采样生成器的频率
         let range = std::iter::successors(Some(start_freq), |&n| Some(n + step))
@@ -147,15 +142,21 @@ impl CP16Generator {
             .collect();
 
         // 第四步：获得字形，如果没找到就用全角问号代替
-        let text_glyph: Vec<&Glyph> = text.chars().filter_map(|x| match get_glyph(x) {
+        let get_glyph = |x| match get_glyph(x) {
             Some(n) => Some(n),
             None => {
                 println!(
-                    "Unifont does not contains {}, will be replased with a full length question mark", x
+                    "Unifont does not contains {}, will be replased with a full length question mark",
+                    x
                 );
                 get_glyph('？')
             }
-        }).collect();
+        };
+        let text_glyph: Vec<&Glyph> = if is_reverse {
+            text.chars().rev().filter_map(get_glyph).collect()
+        } else {
+            text.chars().filter_map(get_glyph).collect()
+        };
 
         // 第五步：根据 16 个采样生成器和每个字符显示时间，生成每行需要渲染的采样数
         let samples_per_line = (sample_rate as f64 / 16.0 * time_per_font) as u32;
@@ -186,13 +187,6 @@ impl CP16Generator {
 
         // 第十步：获取第一个字形的第一行信息
         let iter_index = 0;
-        let line_info = Self::get_line_with_parameter(
-            start_padding,
-            range_end,
-            is_vertical_display_on_waterfall,
-            first_glyph,
-            iter_index,
-        );
 
         Ok(Self {
             freqs,
@@ -201,12 +195,12 @@ impl CP16Generator {
             glyph: first_glyph,
             start_padding,
             range_end,
-            line_info,
             iter_index,
             samples_per_line,
             current_sample: 0,
             is_vertical_display_on_waterfall,
             line_count,
+            is_reverse,
         })
     }
 }
@@ -215,7 +209,31 @@ impl Iterator for CP16Generator {
     type Item = i16;
 
     fn next(&mut self) -> Option<i16> {
-        // 第一步：判断这个字符是否迭代完，即读完了每行信息并生成了一行空隙
+        // 第一步：获取该行信息
+        let line_info = self.get_line();
+
+        // 第二步：开始累加
+        let mut sum_up: i32 = 0;
+
+        // 第三步：如果不是最后的空行，则生成该行信息，否则生成空行
+        if self.iter_index < self.line_count {
+            for x in self.start_padding..self.range_end {
+                if line_info[x] {
+                    sum_up = sum_up + (self.freqs[x].next().unwrap()) as i32;
+                }
+            }
+        }
+
+        // 第四步：计数器加一
+        self.current_sample += 1;
+
+        // 第五步：如果该行的采样生成完毕，转进到下一行
+        if self.current_sample >= self.samples_per_line {
+            self.iter_index += 1;
+            self.current_sample = 0;
+        }
+
+        // 第六步：判断这个字符是否迭代完，即读完了每行信息并生成了一行空隙
         if self.iter_index > self.line_count {
             // 如果迭代完，迭代下一个字符
             self.char_pos += 1;
@@ -255,32 +273,7 @@ impl Iterator for CP16Generator {
 
             // 采样生成计数器置零
             self.current_sample = 0;
-
-            // 获取第一行信息
-            self.line_info = self.get_line();
         }
-
-        // 第二步：如果该行的采样生成完毕，转进到下一行
-        if self.current_sample >= self.samples_per_line {
-            self.iter_index += 1;
-            self.current_sample = 0;
-            self.line_info = self.get_line();
-        }
-
-        // 第四步：开始累加
-        let mut sum_up: i32 = 0;
-
-        // 第五步：如果不是最后的空行，则生成该行信息，否则生成空行
-        if self.iter_index < self.line_count {
-            for x in self.start_padding..self.range_end {
-                if self.line_info[x] {
-                    sum_up = sum_up + (self.freqs[x].next().unwrap()) as i32;
-                }
-            }
-        }
-
-        // 第六步：计数器加一
-        self.current_sample += 1;
 
         // 第七步：输出采样信息，这里除数乘以 2 表示音频电平减半
         return Some((sum_up / (self.glyph.get_width() as i32 * 2)) as i16);
